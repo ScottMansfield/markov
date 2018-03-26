@@ -16,6 +16,7 @@ package graph
 
 import (
 	"bufio"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"strconv"
@@ -82,17 +83,18 @@ func (mg Markov) IncRelationBy(from, to string, n uint64) {
 
 // Serialize serializes the entire graph and sends the data to the given io.Writer
 func (mg Markov) Serialize(w io.Writer) error {
+	gw := gzip.NewWriter(w)
 	mg.lock.Lock()
 	defer mg.lock.Unlock()
 	for from, to := range mg.data {
 		for to, count := range to.data {
-			if _, err := fmt.Fprintf(w, "%s %s %d\n", from, to, count); err != nil {
+			if _, err := fmt.Fprintf(gw, "%s %s %d\n", from, to, count); err != nil {
 				return err
 			}
 		}
 	}
 
-	return nil
+	return gw.Flush()
 }
 
 // Deserialize reads the serialized graph data from the given reader to recreate the graph

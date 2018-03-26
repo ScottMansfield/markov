@@ -57,7 +57,9 @@ func main() {
 	mg := graph.NewMarkov()
 	parse.GoogleNgrams(infile, mg)
 
-	mg.Serialize(bufio.NewWriter(outfile))
+	w := bufio.NewWriter(outfile)
+	mg.Serialize(w)
+	w.Flush()
 }
 
 // TODO:
