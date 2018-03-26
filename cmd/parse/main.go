@@ -12,24 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package parse
+package main
 
 import (
 	"bufio"
 	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 
 	"github.com/ScottMansfield/markov/graph"
 	"github.com/ScottMansfield/markov/parse"
 )
 
 func main() {
-	var infilename, outfilename string
+	var infilename, outfilename, cpuprofile string
 
-	flag.StringVar(&infilename, "if", "", "Input file (corpus)")
+	flag.StringVar(&infilename, "if", "", "Google Ngram file (gzipped input corpus)")
 	flag.StringVar(&outfilename, "of", "", "Output file (serialized graph)")
+	flag.StringVar(&cpuprofile, "cpuprofile", "", "File path for CPU profile. If set, program is profiled.")
 	flag.Parse()
+
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	infile, err := os.Open(infilename)
 	if err != nil {
@@ -44,7 +55,7 @@ func main() {
 	}
 
 	mg := graph.NewMarkov()
-	parse.Parse(infile, mg)
+	parse.GoogleNgrams(infile, mg)
 
 	mg.Serialize(bufio.NewWriter(outfile))
 }

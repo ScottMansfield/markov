@@ -20,32 +20,72 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-// Markov is the main graph data structure
-type Markov map[string]map[string]uint64
-
-// NewMarkov creates a new Markov ready to be used
-func NewMarkov() Markov {
-	return make(Markov)
+type markovNode struct {
+	lock *sync.Mutex
+	data map[string]uint64
 }
 
-// AddRelation adds a relation between two words to the graph
-// and keeps track of number of occurrences.
-func (mg Markov) AddRelation(from, to string) {
-	if conns, ok := mg[from]; ok {
-		conns[to] = conns[to] + 1
+type markovData map[string]markovNode
+
+// Markov is the main graph data structure
+type Markov struct {
+	lock *sync.Mutex
+	data markovData
+}
+
+// NewMarkov creates a new Markov ready to be used
+func NewMarkov() *Markov {
+	return &Markov{
+		lock: &sync.Mutex{},
+		data: make(markovData),
+	}
+}
+
+// IncRelation adds 1 to the count for a relation between two words.
+func (mg Markov) IncRelation(from, to string) {
+	mg.IncRelationBy(from, to, 1)
+}
+
+// IncRelationBy adds n to the count for a relation between two words.
+func (mg Markov) IncRelationBy(from, to string, n uint64) {
+	mg.lock.Lock()
+	node, ok := mg.data[from]
+	mg.lock.Unlock()
+
+	if ok {
+		node.lock.Lock()
+		node.data[to] = node.data[to] + n
+		node.lock.Unlock()
 	} else {
-		mg[from] = map[string]uint64{
-			to: 1,
+		newnode := markovNode{
+			lock: &sync.Mutex{},
+			data: map[string]uint64{
+				to: n,
+			},
+		}
+		mg.lock.Lock()
+		node, ok = mg.data[from]
+		if ok {
+			mg.lock.Unlock()
+			node.lock.Lock()
+			node.data[to] = node.data[to] + n
+			node.lock.Unlock()
+		} else {
+			mg.data[from] = newnode
+			mg.lock.Unlock()
 		}
 	}
 }
 
 // Serialize serializes the entire graph and sends the data to the given io.Writer
 func (mg Markov) Serialize(w io.Writer) error {
-	for from, tomap := range mg {
-		for to, count := range tomap {
+	mg.lock.Lock()
+	defer mg.lock.Unlock()
+	for from, to := range mg.data {
+		for to, count := range to.data {
 			if _, err := fmt.Fprintf(w, "%s %s %d\n", from, to, count); err != nil {
 				return err
 			}
@@ -56,8 +96,8 @@ func (mg Markov) Serialize(w io.Writer) error {
 }
 
 // Deserialize reads the serialized graph data from the given reader to recreate the graph
-func Deserialize(r io.Reader) (Markov, error) {
-	mg := make(Markov)
+func Deserialize(r io.Reader) (*Markov, error) {
+	mg := NewMarkov()
 
 	s := bufio.NewScanner(r)
 	for s.Scan() {
@@ -73,13 +113,7 @@ func Deserialize(r io.Reader) (Markov, error) {
 			panic(err)
 		}
 
-		if _, ok := mg[from]; ok {
-			mg[from][to] = weight
-		} else {
-			mg[from] = map[string]uint64{
-				to: weight,
-			}
-		}
+		mg.IncRelationBy(from, to, weight)
 	}
 
 	return mg, nil
