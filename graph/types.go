@@ -97,9 +97,14 @@ func (mg Markov) Serialize(w io.Writer) error {
 	return gw.Flush()
 }
 
-// Deserialize reads the serialized graph data from the given reader to recreate the graph
-func Deserialize(r io.Reader) (*Markov, error) {
+// DeserializeMarkov reads the serialized graph data from the given reader to recreate the graph
+func DeserializeMarkov(r io.Reader) (*Markov, error) {
 	mg := NewMarkov()
+
+	r, err := gzip.NewReader(bufio.NewReader(r))
+	if err != nil {
+		return nil, err
+	}
 
 	s := bufio.NewScanner(r)
 	for s.Scan() {
