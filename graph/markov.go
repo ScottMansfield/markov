@@ -45,13 +45,31 @@ func NewMarkov() *Markov {
 	}
 }
 
+// StartingPoints returns all the places a random walk can start in the graph
+func (mg *Markov) StartingPoints() []string {
+	mg.lock.Lock()
+	defer mg.lock.Unlock()
+
+	keys := make([]string, 0, len(mg.data))
+	for k := range mg.data {
+		keys = append(keys, k)
+	}
+
+	return keys
+}
+
+// Relations gets the relationships to other words
+func (mg *Markov) Relations(word string) map[string]uint64 {
+	return mg.data[word].data
+}
+
 // IncRelation adds 1 to the count for a relation between two words.
-func (mg Markov) IncRelation(from, to string) {
+func (mg *Markov) IncRelation(from, to string) {
 	mg.IncRelationBy(from, to, 1)
 }
 
 // IncRelationBy adds n to the count for a relation between two words.
-func (mg Markov) IncRelationBy(from, to string, n uint64) {
+func (mg *Markov) IncRelationBy(from, to string, n uint64) {
 	mg.lock.Lock()
 	node, ok := mg.data[from]
 	mg.lock.Unlock()
@@ -82,7 +100,7 @@ func (mg Markov) IncRelationBy(from, to string, n uint64) {
 }
 
 // Serialize serializes the entire graph and sends the data to the given io.Writer
-func (mg Markov) Serialize(w io.Writer) error {
+func (mg *Markov) Serialize(w io.Writer) error {
 	gw := gzip.NewWriter(w)
 	mg.lock.Lock()
 	defer mg.lock.Unlock()
@@ -94,7 +112,8 @@ func (mg Markov) Serialize(w io.Writer) error {
 		}
 	}
 
-	return gw.Flush()
+	gw.Flush()
+	return gw.Close()
 }
 
 // DeserializeMarkov reads the serialized graph data from the given reader to recreate the graph
