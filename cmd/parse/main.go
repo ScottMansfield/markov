@@ -17,8 +17,9 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 
 	"github.com/ScottMansfield/markov/graph"
@@ -28,7 +29,7 @@ import (
 func main() {
 	var infilename, outfilename, cpuprofile string
 
-	flag.StringVar(&infilename, "if", "", "Google Ngram file (gzipped input corpus)")
+	flag.StringVar(&infilename, "if", "", "Folder containing Google Ngram files (gzipped input corpus)")
 	flag.StringVar(&outfilename, "of", "", "Output file (serialized graph)")
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "File path for CPU profile. If set, program is profiled.")
 	flag.Parse()
@@ -42,24 +43,46 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	infile, err := os.Open(infilename)
-	if err != nil {
-		fmt.Println("Error while opening input file:", err)
-		os.Exit(2)
+	var infilenames []string
+
+	filepath.Walk(infilename, func(path string, f os.FileInfo, _ error) error {
+		if f.IsDir() {
+			return nil
+		}
+
+		if filepath.Ext(path) == ".gz" {
+			infilenames = append(infilenames, path)
+		}
+
+		return nil
+	})
+
+	if len(infilenames) == 0 {
+		log.Fatal("Could not find any ngram files")
 	}
 
 	outfile, err := os.Create(outfilename)
 	if err != nil {
-		fmt.Println("Error while opening output file:", err)
-		os.Exit(2)
+		log.Fatal("Error while opening output file:", err)
 	}
 
 	mg := graph.NewMarkov()
-	parse.GoogleNgrams(infile, mg)
+
+	for _, infilename := range infilenames {
+		infile, err := os.Open(infilename)
+		if err != nil {
+			log.Fatal("Error while opening input file:", err)
+		}
+
+		parse.GoogleNgrams(infile, mg)
+
+		infile.Close()
+	}
 
 	w := bufio.NewWriter(outfile)
 	mg.Serialize(w)
 	w.Flush()
+	outfile.Close()
 }
 
 // TODO:
